@@ -56,7 +56,7 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 
 	status = uefi_call_wrapper(systab->BootServices->LoadImage,
 				6,
-				TRUE,
+				FALSE,
 				image,
 				FilePath,
 				NULL,
@@ -73,6 +73,9 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 				NULL);
 	if (!EFI_ERROR(status)) {
 		Print(L"StartImage success\n");
+	}
+	else {
+		Print(L"StartImage Status = %x\n", status);
 	}
 
 	uefi_call_wrapper(systab->BootServices->Stall, 1, 10000000);
