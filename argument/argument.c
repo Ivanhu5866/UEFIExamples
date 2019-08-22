@@ -10,7 +10,8 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 	InitializeLib(image, systab);
 	Argc = GetShellArgcArgv(image, &Argv);
 
-	Print(L"Argument Argc=%d\n", Argc);
+	Print(L"Argument:\n");
+	Print(L"  Argc=%d\n", Argc);
 	for (i = 0 ; i < Argc ; ++i)
 		Print(L"  Argv[%d] = '%s'\n", i, Argv[i]);
 
