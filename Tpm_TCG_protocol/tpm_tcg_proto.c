@@ -148,7 +148,16 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 				   &LastAddr, &Truncated);
 
 	if (EFI_ERROR(Status)) {
-		Print(L"Unable to GetEventLog: %r\n", Status);
+		Print(L"Unable to GetEventLog with format Tcg2: %r\n", Status);
+		Print(L"Try GetEventLog with format Tcg1.2\n");
+		Status = uefi_call_wrapper(Tcg2_protocal->GetEventLog, 5, Tcg2_protocal,
+			   EFI_TCG2_EVENT_LOG_FORMAT_TCG_1_2, &StartAddr,
+			   &LastAddr, &Truncated);
+		if (EFI_ERROR(Status)) {
+			Print(L"Unable to GetEventLog with format Tcg1.2: %r\n", Status);
+		}
+		Print(L"Able to GetEventLog with format Tcg1.2\n");
+		return Status;
 	}
 
 	Print (L"first entry event addr 0x%lx\n", StartAddr);
