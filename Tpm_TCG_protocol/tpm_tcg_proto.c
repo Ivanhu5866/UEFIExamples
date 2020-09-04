@@ -96,6 +96,13 @@ typedef struct {
 	UINT8 Event[];
 } TCG_PCR_EVENT2;
 
+typedef struct {
+	UINT32	pcrIndex;
+	UINT32	eventType;
+	UINT8	digest[20];
+	UINT32	eventDataSize;
+	UINT8	event[];
+} TCG_PCREventStruc;
 
 STATIC UINTN
 GetDigestAlgLength(TPM_ALG_ID AlgId)
@@ -140,59 +147,84 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 		return Status;
 	}
 
+	UINT8 version = EFI_TCG2_EVENT_LOG_FORMAT_TCG_2;
 	EFI_PHYSICAL_ADDRESS StartAddr;
 	EFI_PHYSICAL_ADDRESS LastAddr;
 	BOOLEAN Truncated;
 	Status = uefi_call_wrapper(Tcg2_protocal->GetEventLog, 5, Tcg2_protocal,
-				   EFI_TCG2_EVENT_LOG_FORMAT_TCG_2, &StartAddr,
+				   version, &StartAddr,
 				   &LastAddr, &Truncated);
 
 	if (EFI_ERROR(Status)) {
 		Print(L"Unable to GetEventLog with format Tcg2: %r\n", Status);
 		Print(L"Try GetEventLog with format Tcg1.2\n");
+		version = EFI_TCG2_EVENT_LOG_FORMAT_TCG_1_2;
 		Status = uefi_call_wrapper(Tcg2_protocal->GetEventLog, 5, Tcg2_protocal,
-			   EFI_TCG2_EVENT_LOG_FORMAT_TCG_1_2, &StartAddr,
+			   version, &StartAddr,
 			   &LastAddr, &Truncated);
 		if (EFI_ERROR(Status)) {
 			Print(L"Unable to GetEventLog with format Tcg1.2: %r\n", Status);
+			return Status;
 		}
 		Print(L"Able to GetEventLog with format Tcg1.2\n");
-		return Status;
 	}
 
-	Print (L"first entry event addr 0x%lx\n", StartAddr);
-	Print (L"Last entry event addr 0x%lx\n", LastAddr);
+	if (version == EFI_TCG2_EVENT_LOG_FORMAT_TCG_2) {
+		Print(L"GetEventLog with format Tcg2\n");
 
-	Print (L"Dump last entry event\n");
-	UINT64 size = 0;
-	TCG_PCR_EVENT2 *Event2 = (TCG_PCR_EVENT2 *)LastAddr;
+		Print (L"first entry event addr 0x%lx\n", StartAddr);
+		Print (L"Last entry event addr 0x%lx\n", LastAddr);
 
-	Print(L"  PCR Index: %d\n", Event2->PCRIndex);
-	Print(L"  Event Type: 0x%x\n", Event2->EventType);
-	Print(L"  Digests: %d\n", Event2->Digests.Count);
-	
-	size += sizeof(Event2->PCRIndex) + sizeof(Event2->EventType) + Event2->Digests.Count;
-	
-	UINT8 *Pos = (UINT8 *)Event2->Digests.Digests;
-	UINTN len_digest = 0;
-	for (UINT8 i = 0; i < Event2->Digests.Count; i++) {
+		Print (L"Dump last entry event\n");
+		UINT64 size = 0;
+		TCG_PCR_EVENT2 *Event2 = (TCG_PCR_EVENT2 *)LastAddr;
+
+		Print(L"  PCR Index: %d\n", Event2->PCRIndex);
+		Print(L"  Event Type: 0x%x\n", Event2->EventType);
+		Print(L"  Digests: %d\n", Event2->Digests.Count);
 		
-		len_digest = GetDigestAlgLength(((TPMT_HA *)Pos)->Alg_Id);
-		Print(L"  Alg_ID 0x%x: \n", ((TPMT_HA *)Pos)->Alg_Id);
+		size += sizeof(Event2->PCRIndex) + sizeof(Event2->EventType) + Event2->Digests.Count;
+		
+		UINT8 *Pos = (UINT8 *)Event2->Digests.Digests;
+		UINTN len_digest = 0;
+		for (UINT8 i = 0; i < Event2->Digests.Count; i++) {
+			
+			len_digest = GetDigestAlgLength(((TPMT_HA *)Pos)->Alg_Id);
+			Print(L"  Alg_ID 0x%x: \n", ((TPMT_HA *)Pos)->Alg_Id);
+			/* skip dump digest */
+
+			size += sizeof(TPMT_HA) + len_digest;
+			Pos += sizeof(TPMT_HA) + len_digest;
+		}
+
+		UINT32 DataSize = *(UINT32 *)Pos;
+		size += sizeof(UINT32);
+		Pos += sizeof(UINT32);
+		Print(L"  Event Data Size: %d\n", DataSize);
+		size += DataSize;
+		Pos += DataSize;
+		UINT64 total_event_sz = LastAddr - StartAddr + size;
+		Print(L"  Total event size %d\n", total_event_sz);
+	} else {
+		Print(L"GetEventLog with format Tcg1.2\n");
+
+		Print (L"first entry event addr 0x%lx\n", StartAddr);
+		Print (L"Last entry event addr 0x%lx\n", LastAddr);
+
+		Print (L"Dump last entry event\n");
+		UINT64 size = 0;
+		TCG_PCREventStruc *Event = (TCG_PCREventStruc *)LastAddr;
+
+		Print(L"  PCR Index: %d\n", Event->pcrIndex);
+		Print(L"  Event Type: 0x%x\n", Event->eventType);
+
 		/* skip dump digest */
 
-		size += sizeof(TPMT_HA) + len_digest;
-		Pos += sizeof(TPMT_HA) + len_digest;
+		UINT32 evDataSize = Event->eventDataSize;
+		Print(L"  Event Data Size: %d\n", evDataSize);
+		UINT64 total_event_sz = LastAddr - StartAddr + sizeof(TCG_PCREventStruc) + evDataSize;
+		Print(L"  Total event size %d\n", total_event_sz);
 	}
-
-	UINT32 DataSize = *(UINT32 *)Pos;
-	size += sizeof(UINT32);
-	Pos += sizeof(UINT32);
-	Print(L"  Event Data Size: %d\n", DataSize);
-	size += DataSize;
-	Pos += DataSize;
-	UINT64 total_event_sz = LastAddr - StartAddr + size;
-	Print(L"  Total event size %d\n", total_event_sz);
 
 	return EFI_SUCCESS;
 }
