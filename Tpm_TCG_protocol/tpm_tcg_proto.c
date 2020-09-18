@@ -30,11 +30,19 @@
 typedef UINT64 EFI_PHYSICAL_ADDRESS;
 typedef UINT32 EFI_TCG2_EVENT_LOG_FORMAT;
 typedef UINT16 TPM_ALG_ID;
+typedef UINT32 EFI_TCG2_EVENT_LOG_BITMAP;
+typedef UINT32 EFI_TCG2_EVENT_ALGORITHM_BITMAP;
 
 #define SHA1_DIGEST_SIZE 	20
 #define SHA256_DIGEST_SIZE	32
 #define SHA384_DIGEST_SIZE	48
 #define SHA512_DIGEST_SIZE	64
+
+#define EFI_TCG2_BOOT_HASH_ALG_SHA1	0x00000001
+#define EFI_TCG2_BOOT_HASH_ALG_SHA256	0x00000002
+#define EFI_TCG2_BOOT_HASH_ALG_SHA384	0x00000004
+#define EFI_TCG2_BOOT_HASH_ALG_SHA512	0x00000008
+#define EFI_TCG2_BOOT_HASH_ALG_SM3_256	0x00000010
 
 #define TPM_ALG_SHA1 		(TPM_ALG_ID)(0x0004)
 #define TPM_ALG_AES 		(TPM_ALG_ID)(0x0006)
@@ -65,6 +73,25 @@ typedef UINT16 TPM_ALG_ID;
 #define TPM_ALG_CBC		(TPM_ALG_ID)(0x0042)
 #define TPM_ALG_CFB		(TPM_ALG_ID)(0x0043)
 #define TPM_ALG_ECB		(TPM_ALG_ID)(0x0044)
+
+typedef struct {
+	UINT8 Major;
+	UINT8 Minor;
+} EFI_TCG2_VERSION;
+
+typedef struct {
+	UINT8 Size;
+	EFI_TCG2_VERSION StructureVersion;
+	EFI_TCG2_VERSION ProtocolVersion;
+	EFI_TCG2_EVENT_ALGORITHM_BITMAP HashAlgorithmBitmap;
+	EFI_TCG2_EVENT_LOG_BITMAP SupportedEventLogs;
+	BOOLEAN TPMPresentFlag;
+	UINT16 MaxCommandSize;
+	UINT16 MaxResponseSize;
+	UINT32 ManufacturerID;
+	UINT32 NumberOfPcrBanks;
+	EFI_TCG2_EVENT_ALGORITHM_BITMAP ActivePcrBanks;
+} EFI_TCG2_BOOT_SERVICE_CAPABILITY;
 
 #pragma pack(1)
 
@@ -147,6 +174,38 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 		return Status;
 	}
 
+	EFI_TCG2_BOOT_SERVICE_CAPABILITY cap;
+	cap.Size = sizeof(EFI_TCG2_BOOT_SERVICE_CAPABILITY);
+
+	Status = uefi_call_wrapper(Tcg2_protocal->GetCapability, 2, Tcg2_protocal, &cap);
+	if (EFI_ERROR(Status)) {
+		Print(L"Unable to get capability %r\n", Status);
+		return Status;
+	}
+
+	Print(L"StructureVersion: %d.%d\n", (UINT8)cap.StructureVersion.Major, (UINT8)cap.StructureVersion.Minor);
+	Print(L"ProtocolVersion: %d.%d\n", (UINT8)cap.ProtocolVersion.Major, (UINT8)cap.ProtocolVersion.Minor);
+	Print(L"HashAlgorithmBitmap: %d\n", cap.HashAlgorithmBitmap);
+	Print(L"TPMPresentFlag: %d\n", cap.TPMPresentFlag);
+	Print(L"SupportedEventLogs: %d\n", cap.SupportedEventLogs);
+	/* check event log format firmware supported */
+	if (cap.SupportedEventLogs & EFI_TCG2_EVENT_LOG_FORMAT_TCG_2)
+		Print(L" Crypto agile log format supported\n");
+	if(cap.SupportedEventLogs & EFI_TCG2_EVENT_LOG_FORMAT_TCG_1_2)
+		Print(L" SHA-1 log format supported\n");
+	/* check Active PCR Bank */
+	Print(L"Number of PCR banks: %d\n", cap.NumberOfPcrBanks);	
+	if (cap.ActivePcrBanks & EFI_TCG2_BOOT_HASH_ALG_SHA1)
+		Print(L" Sha-1 supported\n");
+	if(cap.ActivePcrBanks & EFI_TCG2_BOOT_HASH_ALG_SHA256)
+		Print(L" SHA-256 supported\n");
+	if(cap.ActivePcrBanks & EFI_TCG2_BOOT_HASH_ALG_SHA384)
+		Print(L" SHA-384 supported\n");
+	if(cap.ActivePcrBanks & EFI_TCG2_BOOT_HASH_ALG_SHA512)
+		Print(L" SHA-512 supported\n");
+	if(cap.ActivePcrBanks & EFI_TCG2_BOOT_HASH_ALG_SM3_256)
+		Print(L" SM3-256 supported\n");	
+	
 	UINT8 version = EFI_TCG2_EVENT_LOG_FORMAT_TCG_2;
 	EFI_PHYSICAL_ADDRESS StartAddr;
 	EFI_PHYSICAL_ADDRESS LastAddr;
@@ -212,7 +271,6 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 		Print (L"Last entry event addr 0x%lx\n", LastAddr);
 
 		Print (L"Dump last entry event\n");
-		UINT64 size = 0;
 		TCG_PCREventStruc *Event = (TCG_PCREventStruc *)LastAddr;
 
 		Print(L"  PCR Index: %d\n", Event->pcrIndex);
