@@ -223,6 +223,10 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 			Print (L"\n");
 			Print(L"  Event Data Size: %d\n", Event->eventDataSize);
 			Print(L"  Event:\n");
+			if (Pos + Event->eventDataSize > LastAddr) {
+				Print(L"Event data too large, skip dump\n");
+				return EFI_SUCCESS;
+			}
 			for (i = 0; i < Event->eventDataSize; i++) {				
 				Print(L"%2.2x ", Event->event[i]);
 			}
