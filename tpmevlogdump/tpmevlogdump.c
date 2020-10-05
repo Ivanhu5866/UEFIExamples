@@ -197,6 +197,7 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 
 		/* dump first event (EfiSpecIdEvent) */
 		UINT8 *Pos = (UINT8 *)StartAddr;
+		CHAR16 tmpchar[16];
 		TCG_PCREventStruc *Event = (TCG_PCREventStruc *)Pos;
 		Print(L"PCR Index: %d\n", Event->pcrIndex);
 		Print(L"Event Type: 0x%x\n", Event->eventType);
@@ -209,7 +210,10 @@ efi_main (EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 		TCG_EfiSpecIDEventStruct *EventSpecID;
 		EventSpecID = (TCG_EfiSpecIDEventStruct *)Event->event;
 		Print(L"EfiSpecIdEvent:\n");
-		Print(L" Signature: %s\n", (CHAR16 *)EventSpecID->signature);
+		for (i = 0; i < 16; i++) {
+			tmpchar[i] = (CHAR16)(EventSpecID->signature[i]);
+		}
+		Print(L" Signature: %s\n", tmpchar);
 		Print(L" platformClass: 0x%x\n", EventSpecID->platformClass);
 		Print(L" specVersionMinor: 0x%x\n", EventSpecID->specVersionMinor);
 		Print(L" specVersionMajor: 0x%x\n", EventSpecID->specVersionMajor);
